@@ -1,28 +1,108 @@
-name: "AWS Credentials Via Okta"
-description: "Get temporary AWS credentials (using STS) from your Okta profile."
+name: 'AWS Credentials Via Okta'
+description: 'Get temporary AWS credentials (using STS) from your Okta profile.'
 inputs:
   aws_role_arn:
-    description: "ARN of federated Okta role"
+    description: 'ARN of federated Okta role'
     required: true
   okta_username:
-    description: "Username of your Okta login (usually your email)"
+    description: 'Username of your Okta login (usually your email)'
     required: true
   okta_password:
-    description: "Password of your Okta login"
+    description: 'Password of your Okta login'
     required: true
   okta_app_url:
-    description: "Okta AWS App URL (usually the Okta tile URL)"
+    description: 'Okta AWS App URL (usually the Okta tile URL)'
     required: true
   okta_mfa_seed:
-    description: "Seed for obtaining Okta MFA code"
+    description: 'Seed for obtaining Okta MFA code'
     required: true
   okta_mfa_method:
-    description: "Okta MFA Method (https://developer.okta.com/docs/reference/api/factors/)"
+    description: 'Okta MFA Method (https://developer.okta.com/docs/reference/api/factors/)'
     required: false
-    default: "token:software:totp"
+    default: 'token:software:totp'
 runs:
-  using: "docker"
-  image: "Dockerfile"
+  using: 'composite'
+  steps:
+    - run: pip install -q --no-cache-dir --no-warn-script-location 'tokendito>=1,<2' mintotp
+      shell: bash
+    - run: |
+        set -u
+        set -o pipefail
+
+        awsDir="~/.aws"
+        # config="${awsDir}/config"
+        # credentials="${awsDir}/credentials"
+        totp_time=30
+
+        mkdir -p "${awsDir}"
+        # echo -e "[profile default]\noutput = json" >>"$config"
+        OKTA_MFA_METHOD="${{ inputs.okta_mfa_method }}"
+        mfa=$(echo "${{ inputs.okta_mfa_seed }}" | mintotp ${totp_time})
+        echo "tokendito -ap default -ou \"${{ inputs.okta_app_url }}\" -R \"${{ inputs.aws_role_arn }}\" -u \"${{ inputs.okta_username }}\" -p \"${{ inputs.okta_password }}\" -mm \"${OKTA_MFA_METHOD:=token:software:totp}\" -mr $mfa"
+        tokendito -ap default -ou "${{ inputs.okta_app_url }}" -R "${{ inputs.aws_role_arn }}" -u "${{ inputs.okta_username }}" -p "${{ inputs.okta_password }}" -mm "${OKTA_MFA_METHOD:=token:software:totp}" -mr $mfa
+
+        cat "${awsDir}/config"
+        cat "${awsDir}/credentials"
+
+        # # Attempt to get aws credentials via tokendito
+        # max_attempts=10
+        # totp_time=30
+        # totp_error='Each code can only be used once. Please wait for a new code and try again.'
+        # for ((attempts = 1; attempts <= $max_attempts; attempts++)); do
+        #     echo "Requesting AWS credentials via Tokendito."
+        #     t_error=$(tokendito --aws-profile default -ou "${{ inputs.okta_app_url }}" -R "${{ inputs.aws_role_arn }}" --username "${{ inputs.okta_username }}" --password "${{ inputs.okta_password }}" --mfa-method "${OKTA_MFA_METHOD:=token:software:totp}" --mfa-response $(echo "${{ inputs.okta_mfa_seed }}" | mintotp ${totp_time}) 2>&1 1>/dev/null)
+
+        #     if [[ $? == 0 ]]; then
+        #         echo "Succeeded getting credentials in attempt #${attempts}."
+        #         break
+        #     fi
+
+        #     if [[ $t_error == *$totp_error* ]]; then
+        #         echo "Attempt #${attempts} => ERROR: ${totp_error}"
+        #         echo -e "Waiting ${totp_time} seconds before retrying...\n"
+        #         sleep $totp_time
+        #     else
+        #         echo $t_error
+        #         exit 1
+        #     fi
+        # done
+
+        # if [[ $attempts == $((max_attempts + 1)) ]]; then
+        #     echo "Giving up requesting credentials after ${max_attempts} attempts."
+        #     exit 1
+        # fi
+
+        # # Exit immediately if a command exits with a non-zero status.
+        # set -e
+
+        # # Read credentials
+        # section=
+        # while read -r line; do
+        #     # Get section we are currently in
+        #     if [[ "${line}" =~ ^[[:space:]]*\[[-_.a-zA-Z0-9]+\][[:space:]]*$ ]]; then
+        #         section="${line%]}"
+        #         section="${section#[}"
+        #     fi
+        #     # Extract available aws export values
+        #     if [ "${section}" = "default" ]; then
+        #         if [[ "${line}" =~ ^[[:space:]]*aws_access_key_id[[:space:]]*=.*$ ]]; then
+        #             aws_access_key_id="${line##*=*[[:space:]]}"
+        #             echo "AWS_ACCESS_KEY_ID=${aws_access_key_id}" >> $GITHUB_ENV
+        #             echo "::add-mask::${aws_access_key_id}"
+        #         fi
+        #         if [[ "${line}" =~ ^[[:space:]]*aws_secret_access_key[[:space:]]*=.*$ ]]; then
+        #             aws_secret_access_key="${line##*=*[[:space:]]}"
+        #             echo "AWS_SECRET_ACCESS_KEY=${aws_secret_access_key}" >> $GITHUB_ENV
+        #             echo "::add-mask::${aws_secret_access_key}"
+        #         fi
+        #         if [[ "${line}" =~ ^[[:space:]]*aws_session_token[[:space:]]*=.*$ ]]; then
+        #             aws_session_token="${line##*=*[[:space:]]}"
+        #             echo "AWS_SESSION_TOKEN=${aws_session_token}" >> $GITHUB_ENV
+        #             echo "::add-mask::${aws_session_token}"
+        #         fi
+        #     fi
+        # done <"$credentials"
+      shell: bash
 branding:
-  icon: 'unlock'  
+  icon: 'unlock'
   color: 'orange'
