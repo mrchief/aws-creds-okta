@@ -7,7 +7,7 @@ Obtain temporary AWS Creds from your Okta Profile.
 Here's an example. All options are required except `okta_mfa_method` which default to TOTP based notification.
 
 ```yaml
-- name: Create AWS profile
+- name: Get AWS Credentials
   uses: mrchief/aws-creds-okta@master # or a tagged release version
   with:
     aws_role_arn: arn:aws:iam::account-id:role/role-name
@@ -32,6 +32,7 @@ It also masks the actual values in the logs for added security.
 - Currently only supports `totp` authentication. There are plans to add support for other MFA methods. PRs welcome.
 - `okta_app_url` can be obtained by right clicking the Okta tile for you AWS account. This setup allows for federated login to different AWS accounts.
 - `okta_password` & `okta_mfa_seed` can be set via environment variables `${{ env.OKTA_MFA_SEED }}` although it is not recommended to do so as it can leak secrets. Github repo secrets are the easiest way but if you manage secrets via some other mechanism, you can also use them - these are just normal inputs, you can pass them anything.
+- If you run this action multiple times, you will receive new credentials each time, even if you specify the same role arn. This is because we cannot create an aws config or credentials file from the action that is accessible in the workflow. This also means we cannot support profiles.
 
 ## Can I use this
 

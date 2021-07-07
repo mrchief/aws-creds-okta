@@ -8,7 +8,7 @@ config="${awsDir}/config"
 credentials="${awsDir}/credentials"
 
 mkdir -p "${awsDir}"
-echo -e "[profile default]\noutput = json" >>"$config"
+echo -e "[profile default]\noutput = json" >"$config"
 
 # Attempt to get aws credentials via tokendito
 max_attempts=10
